@@ -1,66 +1,96 @@
+**⚠️ This is an example README for use in creating a Base Model. You will need to adjust this document for the model you are using.**
+
 <div align="center">
   <p>
     <a align="center" href="" target="_blank">
       <img
         width="850"
-        src="https://media.roboflow.com/open-source/autodistill/autodistill-banner.png?3"
+        src="https://media.roboflow.com/open-source/autodistill/autodistill-banner.png"
       >
     </a>
   </p>
 </div>
 
-# Autodistill Base Model Template
+# Autodistill Transformers Module
 
-**⚠️ Note: Before you start building a Base Model, check out our [Available Models](https://docs.autodistill.com/#available-models) directory to see if a model is already being implemented. If your desired model is being implemented, check the [Autodistill](https://github.com/autodistill/autodistill) GitHub Issues for progress. We encourage you to offer support to models you want to see in Autodistill if work is already being done on them.**
+This repository contains the code supporting the Transformers models model for use with [Autodistill](https://github.com/autodistill/autodistill).
 
-This repository contains a template for use in creating a Base Model for [Autodistill](https://github.com/autodistill/autodistill).
+[Transformers](https://github.com/huggingface/transformers), maintained by Hugging Face, features a range of state of the art models for Natural Language Processing (NLP), computer vision, and more.
 
-A Base Model is a large model that you can use for automatically labeling data. Autodistill enables you to connect Base Models to a smaller Target Model. A new model is trained using the Target Model architecture and your labeled data. This model will be smaller and thus more cost effective to run.
-
-Autodistill is an ecosystem of Base and Target Models, with the main [Autodistill](https://github.com/autodistill/autodistill) repository acting as the bridge between the two.
-
-This repository contains a starter template from which you can create a Base Model extension.
+This package allows you to write a function that calls a Transformers object detection model and use it to automatically label data. You can use this data to train a fine-tuned model using an architecture supported by Autodistill (i.e. [YOLOv8](https://github.com/autodistil/autodistill-yolov8), [YOLOv5](https://github.com/autodistil/autodistill-yolov5), or [DETR](https://github.com/autodistil/autodistill-detr)).
 
 Read the full [Autodistill documentation](https://autodistill.github.io/autodistill/).
-## Steps to Build a Base Model
 
-To build a base model, first rename the `src` directory to the name of the model you want to implement:
+## Installation
 
-```
-mkdir autodistill_model_name
-```
+To use Transformers with autodistill, you need to install the following dependency:
 
-Use underscores to separate words in the folder name.
-
-Next, open the `model.py` file. This is the file where your model loading and inference code will be stored. If you need to write helper functions for use with your model -- for example, long methods for loading data, processing extensions -- you may opt to create new files to store the helper scripts.
-
-In `model.py`, replace the `Model` class name with the name of your model.
-
-Next, implement the following functions:
-
-1. `__init__`: Code for loading the model.
-2. `predict`: A function that takes in an image name, runs inference, and returns a `supervision` Detections object (object detection) or a `supervision` Classifications object (classification).
-
-Replace the import statement in the `__init__.py` file in your model directory to point to your model. You only need to import the model, such as:
-
-```
-from autodistill_clip.clip_model import CLIP
+```bash
+pip3 install autodistill-transformers
 ```
 
-Your version should be set in the `__init__.py` file as `0.1.0` before submitting your model for review.
+## Quickstart
 
-Update the `setup.py` file to use the name of your model where appropriate. Add all of the requisite dependencies to the `install_requires` section.
+The following example shows how to use the Transformers module to label images using the [Owlv2ForObjectDetection](https://huggingface.co/google/owlv2-large-patch14-ensemble) model.
 
-Your Base Model should feature a README that shows a minimal example of how to use the base model. This should only be a few lines of code. Refer to `README_EXAMPLE.md` for an example of an Autodistill Base Model README. Feel free to copy this example and replace all parts as required.
+You can update the `inference()` functon to use any object detection model supported in the Transformers library.
 
-Your package must be licensed under the same license as the model you are using (i.e. if your model uses an Apache 2.0 license, your Autodistill extension must use the same license). Your license should be in a file called `LICENSE`, stored in the root directory of your Autodistill extension GitHub repository.
+```python
+import cv2
+import torch
+from autodistill.detection import CaptionOntology
+from autodistill.utils import plot
+from transformers import OwlViTForObjectDetection, OwlViTProcessor
 
-Update your README to note the license applied to your package.
+from autodistill_transformers import TransformersModel
 
-When your Autodistill extension is ready for testing, open an Issue in the main [Autodistill](https://github.com/autodistill/autodistill) repository with a link to a public GitHub repository that contains your code.
+processor = OwlViTProcessor.from_pretrained("google/owlvit-base-patch32")
+model = OwlViTForObjectDetection.from_pretrained("google/owlvit-base-patch32")
 
-An Autodistill maintainer will review your code. If accepted, we will:
 
-1. Add your package to the [Autodistill documentation](https://docs.autodistill.com).
-2. Package your project up to PyPi and publish it as an official `autodistill` extension.
-3. Announce your project on social media.
+def inference(image, prompts):
+    inputs = processor(text=prompts, images=image, return_tensors="pt")
+    outputs = model(**inputs)
+
+    target_sizes = torch.Tensor([image.size[::-1]])
+
+    results = processor.post_process_object_detection(
+        outputs=outputs, target_sizes=target_sizes, threshold=0.1
+    )[0]
+
+    return results
+
+
+base_model = TransformersModel(
+    ontology=CaptionOntology(
+        {
+            "a photo of a person": "person",
+            "a photo of a cat": "cat",
+        }
+    ),
+    callback=inference,
+)
+
+# run inference
+results = base_model.predict("image.jpg", confidence=0.1)
+
+print(results)
+
+# plot results
+plot(
+    image=cv2.imread("image.jpg"),
+    detections=results,
+    classes=base_model.ontology.classes(),
+)
+
+# label a directory of images
+base_model.label("./context_images", extension=".jpeg")
+```
+
+## License
+
+This project is licensed under an [MIT license](LICENSE).
+
+## 🏆 Contributing
+
+We love your input! Please see the core Autodistill [contributing guide](https://github.com/autodistill/autodistill/blob/main/CONTRIBUTING.md) to get started. Thank you 🙏 to all our contributors!
