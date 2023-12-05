@@ -5,6 +5,7 @@ import torch
 
 import supervision as sv
 from autodistill.detection import CaptionOntology, DetectionBaseModel
+from autodistill.helpers import load_image
 from PIL import Image
 
 HOME = os.path.expanduser("~")
@@ -20,7 +21,7 @@ class TransformersModel(DetectionBaseModel):
         self.ontology = ontology
 
     def predict(self, input: str, confidence: int = 0.5) -> sv.Detections:
-        image = Image.open(input)
+        image = load_image(input, return_format="PIL")
 
         with torch.no_grad():
             outputs = self.callback(image, [self.ontology.prompts()])
